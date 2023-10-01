@@ -137,7 +137,7 @@ from vine import ensure_promise, promise, transform
 
 from kombu.asynchronous import get_event_loop
 from kombu.asynchronous.aws.ext import boto3, exceptions
-from kombu.asynchronous.aws.sqs.connection import AsyncSQSConnection
+from kombu.asynchronous.aws.sqs.connection import AsyncSQSConnectionV2
 from kombu.asynchronous.aws.sqs.message import AsyncMessage
 from kombu.log import get_logger
 from kombu.utils import scheduling
@@ -765,7 +765,7 @@ class Channel(virtual.Channel):
                 ).format(queue))
             q = self.predefined_queues[queue]
             c = self._predefined_queue_async_clients[queue] = \
-                AsyncSQSConnection(
+                AsyncSQSConnectionV2(
                     sqs_connection=self.sqs(queue=queue),
                     region=q.get('region', self.region)
             )
@@ -774,7 +774,7 @@ class Channel(virtual.Channel):
         if self._asynsqs is not None:
             return self._asynsqs
 
-        c = self._asynsqs = AsyncSQSConnection(
+        c = self._asynsqs = AsyncSQSConnectionV2(
             sqs_connection=self.sqs(queue=queue),
             region=self.region
         )
