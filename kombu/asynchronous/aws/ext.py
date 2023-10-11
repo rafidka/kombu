@@ -26,7 +26,7 @@ __all__ = (
 )
 
 
-def get_response(operation_model, http_response):
+def get_response(operation_model, http_response, protocol):
     """
     This is a copy of botocore`s get_response
 
@@ -47,7 +47,7 @@ def get_response(operation_model, http_response):
     # Use 'query' instead of `operation_model.metadata['protocol']` as in the
     # original implementation of botocore's `get_response`. The rest of the
     # method is copied verbatim from botocore's original implementation.
-    protocol = 'query'  # operation_model.metadata['protocol']
+    # protocol = 'query'  # operation_model.metadata['protocol']
     response_dict = {
         'headers': http_response.headers,
         'status_code': http_response.status_code,

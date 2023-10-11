@@ -179,6 +179,7 @@ class AsyncAWSQueryConnection(AsyncConnection):
                  http_client_params=None, **kwargs):
         if not http_client_params:
             http_client_params = {}
+        print('printing sqs_connection')
         super().__init__(sqs_connection, http_client,
                          **http_client_params)
 
@@ -188,15 +189,53 @@ class AsyncAWSQueryConnection(AsyncConnection):
             params['Action'] = operation
         signer = self.sqs_connection._request_signer
 
+        service_model = self.sqs_connection.meta.service_model
+        protocol = service_model.protocol
+
+        headers = {}
+        if protocol == 'query':
+            content_type = 'application/x-www-form-urlencoded; charset=utf-8'
+            headers['Content-Type'] = content_type
+            method = verb
+        elif protocol == 'json':
+            # TODO This branch is still failing with 400 error. One reason that
+            # I am almost certain of is the fact that the path differs between
+            # the new json protocol and the old query protocol; you would want
+            # to use just the SQS url, e.g. sqs.<region>.amazonaws.com, instead
+            # of the full queue URL. In general, we can take a look at
+            # botocore's JSONSerializer (in serialize.py file) and try to do the
+            # same. This might also be useful:
+            # https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-json-faqs.html
+            operation_model = service_model.operation_model(operation)
+
+            # Content-Type
+            json_version = operation_model.metadata['jsonVersion']
+            content_type = f'application/x-amz-json-{json_version}'
+            headers['Content-Type'] = content_type
+
+            # X-Amz-Target
+            target = '{}.{}'.format(
+                operation_model.metadata['targetPrefix'],
+                operation_model.name,
+            )
+            headers['X-Amz-Target'] = target
+
+            # TODO Use Serializer.DEFAULT_METHOD
+            method = operation_model.http.get('method', 'POST')
+        else:
+            raise Exception(f'Unsupported protocol: {protocol}.')
         # defaults for non-get
         signing_type = 'standard'
         param_payload = {'data': params}
-        if verb.lower() == 'get':
+        if method.lower() == 'get':
             # query-based opts
             signing_type = 'presignurl'
             param_payload = {'params': params}
+        param_payload['headers'] = {
+            'Content-Type': content_type
+        }
 
-        request = AWSRequest(method=verb, url=path, **param_payload)
+        request = AWSRequest(method=method, url=path, **param_payload)
         signer.sign(operation, request, signing_type=signing_type)
         prepared_request = request.prepare()
 
@@ -229,9 +268,12 @@ class AsyncAWSQueryConnection(AsyncConnection):
 
     def _on_list_ready(self, parent, markers, operation, response):
         service_model = self.sqs_connection.meta.service_model
+        protocol = service_model.protocol
         if response.status == self.STATUS_CODE_OK:
             _, parsed = get_response(
-                service_model.operation_model(operation), response.response
+                service_model.operation_model(operation),
+                response.response,
+                protocol
             )
             return parsed
         elif (
@@ -247,9 +289,12 @@ class AsyncAWSQueryConnection(AsyncConnection):
 
     def _on_obj_ready(self, parent, operation, response):
         service_model = self.sqs_connection.meta.service_model
+        protocol = service_model.protocol
         if response.status == self.STATUS_CODE_OK:
             _, parsed = get_response(
-                service_model.operation_model(operation), response.response
+                service_model.operation_model(operation),
+                response.response,
+                protocol
             )
             return parsed
         else:
@@ -257,9 +302,12 @@ class AsyncAWSQueryConnection(AsyncConnection):
 
     def _on_status_ready(self, parent, operation, response):
         service_model = self.sqs_connection.meta.service_model
+        protocol = service_model.protocol
         if response.status == self.STATUS_CODE_OK:
             httpres, _ = get_response(
-                service_model.operation_model(operation), response.response
+                service_model.operation_model(operation),
+                response.response,
+                protocol,
             )
             return httpres.code
         else:
